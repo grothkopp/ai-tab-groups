@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "AI Tab Sorter",
+  "version": "1.0",
+  "description": "Intelligently sort tabs using Chrome's AI Language Model",
+  "permissions": [
+    "tabs",
+    "storage",
+    "scripting",
+    "tabGroups"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "images/icon16.png",
+    "48": "images/icon48.png",
+    "128": "images/icon128.png"
+  }
+}
