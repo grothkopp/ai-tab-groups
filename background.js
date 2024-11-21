@@ -94,7 +94,7 @@ async function generateTagsForTab(content, tab, retryCount = 0) {
     const tagList = response.split(',').map(tag => tag.trim());
 
     // Return top 5 tags for the UI
-    return tagList.slice(0, 9);
+    return tagList.slice(0, 5);
   } catch (error) {
     console.error('Error generating tags:', error);
     if (retryCount < 2) {
@@ -108,39 +108,50 @@ async function generateTagsForTab(content, tab, retryCount = 0) {
 async function groupTab(tab, tags) {
   if (!tab || !tags || tags.length === 0) return;
   
-  const primaryTag = tags[0];
-  let group = await findTabGroup(tab.windowId, primaryTag);
+  let groupId = null;
+  let matchedTag = null;
+
+  // Search through all tags for an existing group
+  for (const tag of tags) {
+    const existingGroupId = await findTabGroup(tab.windowId, tag);
+    if (existingGroupId) {
+      groupId = existingGroupId;
+      matchedTag = tag;
+      break;
+    }
+  }
   
-  if (!group) {
-    // Create a new group with a random color
+  // If no existing group found, create new one with first tag
+  if (groupId === null) {
+    matchedTag = tags[0];
     const colors = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan'];
     const color = colors[Math.floor(Math.random() * colors.length)];
     
-    group = await chrome.tabs.group({
+    groupId = await chrome.tabs.group({
       tabIds: [tab.id],
       createProperties: { windowId: tab.windowId }
     });
     
-    await chrome.tabGroups.update(group, {
-      title: primaryTag,
+    await chrome.tabGroups.update(groupId, {
+      title: matchedTag,
       color: color
     });
   } else {
     await chrome.tabs.group({
       tabIds: [tab.id],
-      groupId: group.id
+      groupId: groupId
     });
   }
 
   // Get the group's color for highlighting
-  const updatedGroup = await chrome.tabGroups.get(group);
+  const group = await chrome.tabGroups.get(groupId);
   
   // Show the tags in the content script
   await chrome.tabs.sendMessage(tab.id, {
     action: 'showTags',
     tags: tags.slice(0, 5),
-    highlightedTag: primaryTag,
-    highlightColor: updatedGroup.color
+    highlightedTag: matchedTag,
+    highlightColor: group.color
   });
 }
 
