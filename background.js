@@ -77,7 +77,7 @@ async function generateTagsForTab(content, tab, retryCount = 0) {
     let title = tab.title || '';
     let url = tab.url || '';
 
-    console.log(tab.id, 'content:', content, url, title);
+    //console.log(tab.id, 'content:', content, url, title);
 
     const userPrompt = `
           These are the current tab groups, if any matches the content of this webpage include it in the tag list:
@@ -98,10 +98,15 @@ async function generateTagsForTab(content, tab, retryCount = 0) {
     // Return top 5 tags for the UI
     return tagList.slice(0, 5);
   } catch (error) {
-    console.error('Error generating tags:', error);
+    console.log('Error generating tags:', error);
     if (retryCount < 2) {
       aiSession = null; // Reset session
       return generateTagsForTab(content, tab, retryCount + 1);
+    }
+    else {
+      console.log('Failed to generate tags after 3 attempts');
+      // close notification in tab
+      chrome.tabs.sendMessage(tab.id, { action: 'hide' });
     }
     return null;
   }
@@ -126,7 +131,7 @@ async function groupTab(tab, tags) {
   // If no existing group found, create new one with first tag
   if (groupId === null) {
     matchedTag = tags[0];
-    const colors = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan'];
+    const colors = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange'];
     const color = colors[Math.floor(Math.random() * colors.length)];
     
     groupId = await chrome.tabs.group({
