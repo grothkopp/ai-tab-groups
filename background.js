@@ -77,6 +77,8 @@ async function generateTagsForTab(content, tab, retryCount = 0) {
     let title = tab.title || '';
     let url = tab.url || '';
 
+    console.log(tab.id, 'content:', content, url, title);
+
     const userPrompt = `
           These are the current tab groups, if any matches the content of this webpage include it in the tag list:
           ${tabGroups}

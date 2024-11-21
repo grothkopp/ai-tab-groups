@@ -15,6 +15,17 @@ style.textContent = `
     width: auto;
     min-width: 200px;
     border: 1px solid #e0e0e0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #333;
+    box-sizing: border-box;
+  }
+  
+  .ai-sorter-message-box * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
   }
   
   .ai-sorter-message-box.show {
@@ -35,21 +46,39 @@ style.textContent = `
     transition: opacity 0.2s;
     font-size: 18px;
     font-family: Arial, sans-serif;
+    color: #333;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
   }
 
   .ai-sorter-close:hover {
     opacity: 1;
   }
   
+  .ai-sorter-loader-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 24px;
+  }
+  
   .ai-sorter-loader {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
     border: 2px solid #f3f3f3;
     border-top: 2px solid #3498db;
     border-radius: 50%;
     animation: spin 1s linear infinite;
-    margin-right: 10px;
+  }
+  
+  .ai-sorter-loader-text {
+    font-size: 14px;
+    color: #333;
+    margin: 0;
+    padding: 0;
   }
   
   .ai-sorter-tags {
@@ -60,11 +89,16 @@ style.textContent = `
   }
   
   .ai-sorter-tag {
-    padding: 4px 8px;
+    padding: 6px 10px;
     border-radius: 4px;
     background: #f0f0f0;
     cursor: pointer;
     transition: background-color 0.2s;
+    font-size: 13px;
+    line-height: 1;
+    font-weight: 500;
+    border: none;
+    margin: 0;
   }
   
   .ai-sorter-tag:hover {
@@ -73,6 +107,13 @@ style.textContent = `
   
   .ai-sorter-tag.highlighted {
     color: white;
+  }
+
+  .ai-sorter-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: #666;
+    margin-bottom: 8px;
   }
   
   @keyframes spin {
@@ -101,8 +142,10 @@ function showProcessing() {
   }
   messageBox.innerHTML = `
     <div class="ai-sorter-close">×</div>
-    <div class="ai-sorter-loader"></div>
-    <span>Processing page content...</span>
+    <div class="ai-sorter-loader-container">
+      <div class="ai-sorter-loader"></div>
+      <span class="ai-sorter-loader-text">Processing page content...</span>
+    </div>
   `;
   messageBox.classList.add('show');
 }
@@ -122,7 +165,7 @@ function showTags(tags, highlightedTag, highlightColor) {
   
   messageBox.innerHTML = `
     <div class="ai-sorter-close">×</div>
-    <div>Suggested groups:</div>
+    <div class="ai-sorter-title">Suggested groups:</div>
     <div class="ai-sorter-tags">${tagsHtml}</div>
   `;
 
