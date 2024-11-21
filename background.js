@@ -57,15 +57,15 @@ async function processQueue() {
 }
 
 async function generateTagsForTab(content, tab, retryCount = 0) {
-  const MAX_RETRIES = 3;
+  if (!aiSession) {
+    aiSession = await initializeAI();
+    if (!aiSession) return null;
+  }
 
-  console.log('Generating tags...', tab); 
   try {
-    if (!aiSession) {
-      aiSession = await initializeAI();
-      if (!aiSession) throw new Error('Failed to initialize AI session');
-    }
-   
+    // Show processing state in the content script
+    await chrome.tabs.sendMessage(tab.id, { action: 'showProcessing' });
+
     let tabGroups = '';
     const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
     for (const group of groups) {
@@ -73,78 +73,75 @@ async function generateTagsForTab(content, tab, retryCount = 0) {
     }
     tabGroups = tabGroups.slice(0, -2);
     console.log('Tab groups:', tabGroups);
-  
+
     let title = tab.title || '';
     let url = tab.url || '';
-    
+
     const userPrompt = `
-      These are the current tab groups, if any matches the content of this webpage include it in the tag list:
-      ${tabGroups}
-      Analyze this webpage and provide 9 tags (TAGS MUST BE IN ENGLISH! TRANSLATE IF NEEDED!):
-      ${url}
-      ${title}
-      ${content.slice(0, 1000)}
-    `;
+          These are the current tab groups, if any matches the content of this webpage include it in the tag list:
+          ${tabGroups}
+          Analyze this webpage and provide 9 tags (TAGS MUST BE IN ENGLISH! TRANSLATE IF NEEDED!):
+          ${url}
+          ${title}
+          ${content.slice(0, 1000)}
+        `;
+    // Show processing state in the content script
 
     const response = await aiSession.prompt(userPrompt);
     const tags = response.split(',').map(tag => tag.trim());
-    
-    console.log('Generated tags:', tags, tab, tabGroups);
-    
-    if (!Array.isArray(tags)) {
-      throw new Error('Invalid tags format');
-    }
-    
-    return tags;
+
+
+    const tagList = response.split(',').map(tag => tag.trim());
+
+    // Return top 5 tags for the UI
+    return tagList.slice(0, 9);
   } catch (error) {
-    console.log(`Error generating tags (attempt ${retryCount + 1}/${MAX_RETRIES}):`, error);
-    
-    if (retryCount < MAX_RETRIES - 1) {
-      console.log(`Retrying... (${retryCount + 2}/${MAX_RETRIES})`);
-      await new Promise(resolve => setTimeout(resolve, 100 * (retryCount + 1)));
+    console.error('Error generating tags:', error);
+    if (retryCount < 2) {
+      aiSession = null; // Reset session
       return generateTagsForTab(content, tab, retryCount + 1);
     }
-    
     return null;
   }
 }
 
 async function groupTab(tab, tags) {
-  let found = false;
-
-  for (const tag of tags) {
-    try {
-      const groupId = await findTabGroup(tab.windowId, tag);
-     
-      if (groupId !== false) {
-        await chrome.tabs.group({
-          tabIds: tab.id,
-          groupId
-        });
-        found = true;
-        break;
-      }
-    } catch (error) {
-      console.error(`Error processing tag ${tag}:`, error);
-      continue;
-    }
+  if (!tab || !tags || tags.length === 0) return;
+  
+  const primaryTag = tags[0];
+  let group = await findTabGroup(tab.windowId, primaryTag);
+  
+  if (!group) {
+    // Create a new group with a random color
+    const colors = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan'];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    
+    group = await chrome.tabs.group({
+      tabIds: [tab.id],
+      createProperties: { windowId: tab.windowId }
+    });
+    
+    await chrome.tabGroups.update(group, {
+      title: primaryTag,
+      color: color
+    });
+  } else {
+    await chrome.tabs.group({
+      tabIds: [tab.id],
+      groupId: group.id
+    });
   }
 
-  if (!found) {
-    try {
-      const groupId = await chrome.tabs.group({
-        tabIds: tab.id,
-        createProperties: { windowId: tab.windowId }
-      });
-      
-      await chrome.tabGroups.update(groupId, {
-        title: tags[0],
-        collapsed: false
-      });
-    } catch (error) {
-      console.error('Error creating new group:', error);
-    }
-  }
+  // Get the group's color for highlighting
+  const updatedGroup = await chrome.tabGroups.get(group);
+  
+  // Show the tags in the content script
+  await chrome.tabs.sendMessage(tab.id, {
+    action: 'showTags',
+    tags: tags.slice(0, 5),
+    highlightedTag: primaryTag,
+    highlightColor: updatedGroup.color
+  });
 }
 
 async function processTab(tab) {
@@ -273,3 +270,10 @@ async function getTabContents() {
   }));
 }
 
+// Add listener for tag click messages
+chrome.runtime.onMessage.addListener(async (message, sender) => {
+  if (message.action === 'moveToGroup' && sender.tab) {
+    const tab = sender.tab;
+    await groupTab(tab, [message.tag]);
+  }
+});
