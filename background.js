@@ -303,58 +303,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
-// Keep the manual sorting functionality
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'sortTabs') {
-    (async () => {
-      try {
-        const tabContents = await getTabContents();
-        const groups = await categorizeTabs(tabContents);
-        
-        if (groups) {
-          await sortTabsIntoGroups(groups);
-          sendResponse({ success: true });
-        } else {
-          sendResponse({ success: false });
-        }
-      } catch (error) {
-        console.error('Tab sorting failed:', error);
-        sendResponse({ success: false });
-      }
-    })();
-    return true; // Indicates we'll send response asynchronously
-  }
-});
-
-/**
- * Extracts the content of all tabs
- * @returns {Promise<Object[]>} An array of objects containing tab ID, URL, title, and content
- */
-async function getTabContents() {
-  const tabs = await chrome.tabs.query({});
-  return Promise.all(tabs.map(async (tab) => {
-    try {
-      const [{ result }] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        function: () => document.body.innerText
-      });
-      return {
-        id: tab.id,
-        url: tab.url,
-        title: tab.title,
-        content: result
-      };
-    } catch (error) {
-      console.error(`Could not extract content from tab ${tab.id}:`, error);
-      return {
-        id: tab.id,
-        url: tab.url,
-        title: tab.title,
-        content: ''
-      };
-    }
-  }));
-}
 
 // Add listener for tag click messages
 chrome.runtime.onMessage.addListener(async (message, sender) => {
