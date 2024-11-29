@@ -1,6 +1,6 @@
 # AI Tab Groups Chrome Extension
 
-![screenshot](images/aitabgroups-screenshoti1.png)
+![screenshot](images/aitabgroups-screenshot1.png)
 
 ## Overview
 AI Tab Groups is a Chrome extension that uses the experimental AI Language Model API to intelligently categorize and group your browser tabs.
