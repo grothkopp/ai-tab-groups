@@ -1,140 +1,29 @@
-// Create and inject the message box styles
-const style = document.createElement('style');
-style.textContent = `
-  .ai-sorter-message-box {
-    position: fixed;
-    top: -100px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: white;
-    padding: 15px 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    z-index: 10000;
-    transition: top 0.3s ease-in-out;
-    width: auto;
-    min-width: 200px;
-    border: 1px solid #e0e0e0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    font-size: 14px;
-    line-height: 1.4;
-    color: #333;
-    box-sizing: border-box;
-  }
-  
-  .ai-sorter-message-box * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
-  
-  .ai-sorter-message-box.show {
-    top: 20px;
-  }
-  
-  .ai-sorter-close {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    opacity: 0.6;
-    transition: opacity 0.2s;
-    font-size: 18px;
-    font-family: Arial, sans-serif;
-    color: #333;
-    background: none;
-    border: none;
-    padding: 0;
-    margin: 0;
-  }
+/**
+ * Content script for the AI Tab Groups extension
+ * This script handles the UI elements that appear when processing and organizing tabs
+ * Styles are defined in content.css
+ */
 
-  .ai-sorter-close:hover {
-    opacity: 1;
-  }
-  
-  .ai-sorter-loader-container {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    min-height: 24px;
-  }
-  
-  .ai-sorter-loader {
-    flex-shrink: 0;
-    width: 16px;
-    height: 16px;
-    border: 2px solid #f3f3f3;
-    border-top: 2px solid #3498db;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-  
-  .ai-sorter-loader-text {
-    font-size: 14px;
-    color: #333;
-    margin: 0;
-    padding: 0;
-  }
-  
-  .ai-sorter-tags {
-    margin-top: 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  
-  .ai-sorter-tag {
-    padding: 6px 10px;
-    border-radius: 4px;
-    background: #f0f0f0;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    font-size: 13px;
-    line-height: 1;
-    font-weight: 500;
-    border: none;
-    margin: 0;
-  }
-  
-  .ai-sorter-tag:hover {
-    opacity: 0.8;
-  }
-  
-  .ai-sorter-tag.highlighted {
-    color: white;
-  }
-
-  .ai-sorter-title {
-    font-size: 13px;
-    font-weight: 500;
-    color: #666;
-    margin-bottom: 8px;
-  }
-  
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-`;
-document.head.appendChild(style);
-
-// Create message box element
+// Create and inject the floating message box that will show processing state and suggested groups
 const messageBox = document.createElement('div');
 messageBox.className = 'ai-sorter-message-box';
 document.body.appendChild(messageBox);
 
+// Timer for auto-hiding the message box
 let autoCloseTimer = null;
 
+/**
+ * Hides the message box by removing the 'show' class
+ * This triggers the CSS transition to slide it up and out of view
+ */
 function hideMessageBox() {
   messageBox.classList.remove('show');
 }
 
-// Function to show the processing state
+/**
+ * Shows the processing state with a loading spinner
+ * Called when the extension starts analyzing the current tab
+ */
 function showProcessing() {
   if (autoCloseTimer) {
     clearTimeout(autoCloseTimer);
@@ -150,7 +39,12 @@ function showProcessing() {
   messageBox.classList.add('show');
 }
 
-// Function to show tags
+/**
+ * Displays the suggested tab groups as clickable tags
+ * @param {string[]} tags - Array of suggested group names
+ * @param {string} highlightedTag - The currently selected/active group
+ * @param {string} highlightColor - Color to use for the highlighted tag (matches the tab group color)
+ */
 function showTags(tags, highlightedTag, highlightColor) {
   if (autoCloseTimer) {
     clearTimeout(autoCloseTimer);
@@ -169,25 +63,27 @@ function showTags(tags, highlightedTag, highlightColor) {
     <div class="ai-sorter-tags">${tagsHtml}</div>
   `;
 
-  // Set auto-close timer
+  // Auto-hide the message box after 10 seconds
   autoCloseTimer = setTimeout(hideMessageBox, 10000);
 }
 
-// Handle tag clicks and close button
+// Set up click handlers for the message box
 messageBox.addEventListener('click', (e) => {
   const tagElement = e.target.closest('.ai-sorter-tag');
   const closeButton = e.target.closest('.ai-sorter-close');
   
   if (closeButton) {
+    // Handle close button click
     hideMessageBox();
   } else if (tagElement && !tagElement.classList.contains('highlighted')) {
+    // Handle tag click - send message to move tab to the selected group
     const tag = tagElement.dataset.tag;
     chrome.runtime.sendMessage({ action: 'moveToGroup', tag });
     hideMessageBox();
   }
 });
 
-// Listen for messages from the background script
+// Listen for messages from the background script to update UI
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'showProcessing') {
     showProcessing();

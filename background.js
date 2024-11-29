@@ -1,10 +1,20 @@
-// Background script for AI Tab Sorter
+/**
+ * Background script for AI Tab Groups Chrome Extension
+ * This script handles the core logic of analyzing tab content and organizing them into groups
+ * using AI-powered categorization.
+ */
 
-let aiSession = null;
-let runningTabs = new Set();
-let requestQueue = [];
-let isProcessingQueue = false;
+// Global state management
+let aiSession = null;  // Holds the AI language model session
+let runningTabs = new Set();  // Tracks tabs currently being processed
+let requestQueue = [];  // Queue of pending tab analysis requests
+let isProcessingQueue = false;  // Flag to prevent concurrent queue processing
 
+/**
+ * Initializes the AI language model session with a specific system prompt
+ * The AI is configured to generate exactly 9 English tags for categorizing tabs
+ * @returns {Promise<Object|null>} The initialized AI session or null if initialization fails
+ */
 async function initializeAI() {
   if (aiSession) return aiSession;
 
@@ -29,6 +39,10 @@ IMPORTANT: TAGS MUST ALWAYS BE IN ENGLISH, TRANSLATE IF NEEDED!
 // Initialize AI session when the extension loads
 initializeAI();
 
+/**
+ * Processes the queue of tab analysis requests sequentially
+ * This ensures we don't overwhelm the AI service with concurrent requests
+ */
 async function processQueue() {
   if (isProcessingQueue || requestQueue.length === 0) return;
   
@@ -56,6 +70,13 @@ async function processQueue() {
   }
 }
 
+/**
+ * Generates tags for a tab using AI analysis
+ * @param {string} content - The text content of the tab
+ * @param {chrome.tabs.Tab} tab - The tab object being analyzed
+ * @param {number} retryCount - Number of retry attempts (max 3)
+ * @returns {Promise<string[]|null>} Array of generated tags or null if generation fails
+ */
 async function generateTagsForTab(content, tab, retryCount = 0) {
   if (!aiSession) {
     aiSession = await initializeAI();
@@ -66,19 +87,20 @@ async function generateTagsForTab(content, tab, retryCount = 0) {
     // Show processing state in the content script
     await sendTabMessage(tab.id, { action: 'showProcessing' });
 
+    // Get existing tab group names to potentially reuse them
     let tabGroups = '';
     const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
     for (const group of groups) {
       tabGroups += `${group.title}, `;
     }
     tabGroups = tabGroups.slice(0, -2);
-    console.log('Tab groups:', tabGroups);
 
     let title = tab.title || '';
     let url = tab.url || '';
 
-    //console.log(tab.id, 'content:', content, url, title);
-
+    // Construct prompt for AI analysis
+    // Include existing groups, URL, title, and page content
+    // Limit content to 1000 chars to stay within token limits
     const userPrompt = `
           These are the current tab groups, if any matches the content of this webpage include it in the tag list:
           ${tabGroups}
@@ -87,38 +109,42 @@ async function generateTagsForTab(content, tab, retryCount = 0) {
           ${title}
           ${content.slice(0, 1000)}
         `;
-    // Show processing state in the content script
 
     const response = await aiSession.prompt(userPrompt);
     const tags = response.split(',').map(tag => tag.trim());
 
-
-    const tagList = response.split(',').map(tag => tag.trim());
-
     // Return top 5 tags for the UI
-    return tagList.slice(0, 5);
+    return tags.slice(0, 5);
+
   } catch (error) {
     console.log('Error generating tags:', error);
     if (retryCount < 2) {
-      aiSession = null; // Reset session
+      // Reset session and retry up to 2 times
+      aiSession = null;
       return generateTagsForTab(content, tab, retryCount + 1);
     }
     else {
       console.log('Failed to generate tags after 3 attempts');
-      // close notification in tab
       await sendTabMessage(tab.id, { action: 'hide' });
     }
     return null;
   }
 }
 
+/**
+ * Groups a tab based on AI-generated tags
+ * Either adds the tab to an existing group with a matching tag
+ * or creates a new group with the first tag
+ * @param {chrome.tabs.Tab} tab - The tab to be grouped
+ * @param {string[]} tags - Array of AI-generated tags
+ */
 async function groupTab(tab, tags) {
   if (!tab || !tags || tags.length === 0) return;
   
   let groupId = null;
   let matchedTag = null;
 
-  // Search through all tags for an existing group
+  // First try to find an existing group matching any of the tags
   for (const tag of tags) {
     const existingGroupId = await findTabGroup(tab.windowId, tag);
     if (existingGroupId) {
@@ -128,11 +154,12 @@ async function groupTab(tab, tags) {
     }
   }
   
-  // If no existing group found, create new one with first tag
+  // If no matching group found, create a new one with the first tag
   if (groupId === null) {
     matchedTag = tags[0];
     const colors = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange'];
-    const color = colors[Math.floor(Math.random() * colors.length)];
+    const color_index = Math.floor(Math.random() * colors.length);
+    const color = colors[color_index];
     
     groupId = await chrome.tabs.group({
       tabIds: [tab.id],
@@ -144,34 +171,44 @@ async function groupTab(tab, tags) {
       color: color
     });
   } else {
+    // Add tab to existing group
     await chrome.tabs.group({
       tabIds: [tab.id],
       groupId: groupId
     });
   }
 
-  // Get the group's color for highlighting
+  // Map Chrome's color names to their hex values for UI highlighting
   const group = await chrome.tabGroups.get(groupId);
-  
-  // Show the tags in the content script
+  const real_colors = {'grey':'#5f6368', 'blue':'#1973e8', 'red':'#d93025', 'yellow':'#f9ab01', 'green':'#188037', 'pink':'#d01884', 'purple':'#a142f4', 'cyan':'#007b83', 'orange':'#fa903e'};
+
+  // Update the UI with tags and highlight the selected tag
   await sendTabMessage(tab.id, {
     action: 'showTags',
     tags: tags.slice(0, 5),
     highlightedTag: matchedTag,
-    highlightColor: group.color
+    highlightColor: real_colors[group.color]
   });
 }
 
+/**
+ * Processes a tab by extracting its content and queueing it for AI analysis
+ * Skips tabs that are already grouped or being processed
+ * @param {chrome.tabs.Tab} tab - The tab to process
+ */
 async function processTab(tab) {
+  // Skip if tab is already in a group
   if (tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) {
     return;
   }
 
+  // Skip if tab is already being processed
   if (runningTabs.has(tab.id)) {
     console.log('Tab is already being processed', tab.id);
     return;
   }
 
+  // Skip empty tabs and chrome://newtab 
   if (!tab.url || tab.url === 'chrome://newtab/') {
     return;
   }
@@ -180,11 +217,16 @@ async function processTab(tab) {
 
   const content = await getTabContent(tab.id);
   
-  // Add request to queue
+  // Queue tab for processing
   requestQueue.push({ tab, content });
   processQueue();
 }
 
+/**
+ * Extracts the text content of a tab
+ * @param {number} tabId - The ID of the tab to extract content from
+ * @returns {Promise<string>} The extracted content
+ */
 async function getTabContent(tabId) {
   try {
     const [{ result }] = await chrome.scripting.executeScript({
@@ -198,6 +240,12 @@ async function getTabContent(tabId) {
   }
 }
 
+/**
+ * Finds a tab group matching a given tag name
+ * @param {number} windowId - The ID of the window to search in
+ * @param {string} tagName - The name of the tag to search for
+ * @returns {Promise<number|null>} The ID of the matching group or null if not found
+ */
 async function findTabGroup(windowId, tagName) {
   // Get all tab groups in the window
   const groups = await chrome.tabGroups.query({ windowId });
@@ -231,7 +279,12 @@ async function findTabGroup(windowId, tagName) {
   return false;
 }
 
-// Helper function to safely send messages to tabs
+/**
+ * Sends a message to a tab's content script
+ * @param {number} tabId - The ID of the tab to send the message to
+ * @param {Object} message - The message to send
+ * @returns {Promise<boolean>} Whether the message was sent successfully
+ */
 async function sendTabMessage(tabId, message) {
   try {
     await chrome.tabs.sendMessage(tabId, message);
@@ -273,6 +326,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
+/**
+ * Extracts the content of all tabs
+ * @returns {Promise<Object[]>} An array of objects containing tab ID, URL, title, and content
+ */
 async function getTabContents() {
   const tabs = await chrome.tabs.query({});
   return Promise.all(tabs.map(async (tab) => {
