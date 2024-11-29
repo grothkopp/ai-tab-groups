@@ -64,7 +64,7 @@ async function generateTagsForTab(content, tab, retryCount = 0) {
 
   try {
     // Show processing state in the content script
-    await chrome.tabs.sendMessage(tab.id, { action: 'showProcessing' });
+    await sendTabMessage(tab.id, { action: 'showProcessing' });
 
     let tabGroups = '';
     const groups = await chrome.tabGroups.query({ windowId: tab.windowId });
@@ -106,7 +106,7 @@ async function generateTagsForTab(content, tab, retryCount = 0) {
     else {
       console.log('Failed to generate tags after 3 attempts');
       // close notification in tab
-      chrome.tabs.sendMessage(tab.id, { action: 'hide' });
+      await sendTabMessage(tab.id, { action: 'hide' });
     }
     return null;
   }
@@ -154,7 +154,7 @@ async function groupTab(tab, tags) {
   const group = await chrome.tabGroups.get(groupId);
   
   // Show the tags in the content script
-  await chrome.tabs.sendMessage(tab.id, {
+  await sendTabMessage(tab.id, {
     action: 'showTags',
     tags: tags.slice(0, 5),
     highlightedTag: matchedTag,
@@ -229,6 +229,17 @@ async function findTabGroup(windowId, tagName) {
   }
 
   return false;
+}
+
+// Helper function to safely send messages to tabs
+async function sendTabMessage(tabId, message) {
+  try {
+    await chrome.tabs.sendMessage(tabId, message);
+    return true;
+  } catch (error) {
+    console.log(`Failed to send message to tab ${tabId}:`, message.action);
+    return false;
+  }
 }
 
 // Listen for tab updates

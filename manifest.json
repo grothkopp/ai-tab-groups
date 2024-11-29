@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AI Tab Sorter",
+  "name": "AI Tab Groups",
   "version": "1.0",
-  "description": "Intelligently sort tabs using Chrome's AI Language Model",
+  "description": "Intelligently group tabs using Chrome's AI Language Model",
   "permissions": [
     "tabs",
     "storage",
